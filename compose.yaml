@@ -1,0 +1,13 @@
+services:
+  instapaper-mcp:
+    build: .
+    container_name: instapaper-mcp
+    env_file: .env
+    restart: unless-stopped
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "/instapaper-mcp", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
