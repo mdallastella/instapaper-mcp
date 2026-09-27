@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -77,5 +78,30 @@ func TestAddBookmark(t *testing.T) {
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.Code != 1240 {
 		t.Fatalf("want APIError 1240, got %v", err)
+	}
+}
+
+func TestBearerAuth(t *testing.T) {
+	h := bearerAuth("secret", slog.New(slog.DiscardHandler), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	for _, tc := range []struct {
+		header string
+		want   int
+	}{
+		{"", http.StatusUnauthorized},
+		{"secret", http.StatusUnauthorized},
+		{"Bearer wrong", http.StatusUnauthorized},
+		{"Bearer secret", http.StatusTeapot},
+	} {
+		req := httptest.NewRequest("POST", "/mcp", nil)
+		if tc.header != "" {
+			req.Header.Set("Authorization", tc.header)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Errorf("Authorization %q: got %d, want %d", tc.header, rec.Code, tc.want)
+		}
 	}
 }

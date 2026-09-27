@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"flag"
 	"fmt"
@@ -46,6 +47,11 @@ func main() {
 		logger.Error("config", "err", err)
 		os.Exit(1)
 	}
+	token := os.Getenv("MCP_BEARER_TOKEN")
+	if token == "" {
+		logger.Error("config", "err", "missing env var: MCP_BEARER_TOKEN")
+		os.Exit(1)
+	}
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "instapaper-mcp", Version: "0.1.0"}, nil)
 	mcp.AddTool(server, &mcp.Tool{
@@ -72,8 +78,8 @@ func main() {
 	})
 
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
-		&mcp.StreamableHTTPOptions{Stateless: true, Logger: logger}))
+	mux.Handle("/mcp", bearerAuth(token, logger, mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
+		&mcp.StreamableHTTPOptions{Stateless: true, Logger: logger})))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
@@ -119,6 +125,20 @@ func newClientFromEnv() (*Client, error) {
 		return nil, fmt.Errorf("missing env vars: %s", strings.Join(missing, ", "))
 	}
 	return c, nil
+}
+
+// bearerAuth rejects requests whose Authorization header does not carry token.
+func bearerAuth(token string, logger *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			logger.Warn("unauthorized", "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="instapaper-mcp"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func probe(addr string) int {

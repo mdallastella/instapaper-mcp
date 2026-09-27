@@ -5,8 +5,10 @@ Minimal MCP server (Streamable HTTP) with one tool, `save_url`, that saves a URL
 ## Configure
 
 ```sh
-cp .env.example .env   # fill in consumer key/secret, Instapaper login, HERMES_NETWORK
+cp .env.example .env   # fill in consumer key/secret, Instapaper login, MCP_BEARER_TOKEN
 ```
+
+`/mcp` requires `Authorization: Bearer $MCP_BEARER_TOKEN` (generate one with `openssl rand -base64 32`); `/healthz` is open.
 
 The xAuth exchange runs on the first tool call; the resulting token is kept in memory.
 
@@ -25,6 +27,8 @@ mcp_servers:
   instapaper:
     url: "http://instapaper-mcp:8080/mcp"
     timeout: 60
+    headers:
+      Authorization: "Bearer <MCP_BEARER_TOKEN>"
 ```
 
 ## Develop
